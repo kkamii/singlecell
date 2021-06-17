@@ -35,3 +35,25 @@ write_xlsx(macro_deg,"/data/hongjy/06GA/macro_deg.xlsx")
 
 ### DAVID ##
 https://david.ncifcrf.gov/summary.jsp
+
+
+
+
+#############################################################################################################
+####################################### Dendritic cell#######################################################
+#############################################################################################################
+dendritic<-subset(immune.combined_annotated, idents = "Dendritic Cell")
+
+dendritic$Condition[dendritic$Condition%in%c("normal1","normal2","normal3")]<-"normal"
+
+dendritic <- SetIdent(dendritic, value = dendritic@meta.data$seurat_clusters)
+dendritic<-FindMarkers(dendritic,ident.1 = 31, ident.2=29)# ,test.use = "DESeq2")
+dendritic %>% arrange(desc(avg_log2FC)) %>% head(10)
+dendritic$Gene<-rownames(dendritic)
+
+# Make a basic volcano plot
+with(dendritic, plot(avg_log2FC, -log10(p_val_adj), pch=20, main="Volcano plot", xlim=c(-10.5,10)))
+
+with(subset(dendritic, p_val_adj<.05 & avg_log2FC>= 1.5), points(avg_log2FC, -log10(p_val_adj), pch=20, col="red"))
+with(subset(dendritic, p_val_adj<.05 & avg_log2FC <= (-1.5)) , points(avg_log2FC, -log10(p_val_adj), pch=20, col="blue"))
+
