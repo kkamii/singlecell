@@ -1,0 +1,37 @@
+
+
+#############################################################################################################
+####################################### Macropahgecell#######################################################
+#############################################################################################################
+immune.combined_annotated@active.ident %>% unique
+
+macro<-subset(immune.combined_annotated, idents = "Macrophage")
+
+macro$Condition[macro$Condition%in%c("normal1","normal2","normal3")]<-"normal"
+
+macro <- SetIdent(macro, value = macro@meta.data$seurat_clusters)
+macro<-FindMarkers(macro,ident.1 = 33, ident.2=c(8,30))# ,test.use = "DESeq2")
+
+macro$Gene<-rownames(macro)
+
+# Make a basic volcano plot
+with(macro, plot(avg_log2FC, -log10(p_val_adj), pch=20, main="Volcano plot", xlim=c(-10.5,10)))
+
+with(subset(macro, p_val_adj<.05 & avg_log2FC>= 1.5), points(avg_log2FC, -log10(p_val_adj), pch=20, col="red"))
+with(subset(macro, p_val_adj<.05 & avg_log2FC <= (-1.5)) , points(avg_log2FC, -log10(p_val_adj), pch=20, col="blue"))
+
+# Label points with the textxy function from the calibrate plot
+install.packages("calibrate")
+library(calibrate)
+
+with(subset(macro, Gene%in%c("CXCL9","CXCL10","FCGR1A","STAT1","IRF5")), textxy(avg_log2FC, -log10(p_val_adj), labs=Gene, cex=.8))
+
+with(subset(macro, Gene%in%c("CD163","MRC1","IRF4","STAT6")), textxy(avg_log2FC, -log10(p_val_adj), labs=Gene, cex=.8))
+
+macro_deg<-macro %>% filter(avg_log2FC>=2.5,p_val_adj<=0.05)
+
+## macrophage up-regulated DEGs and upload to DAVID ## gene ontology analysis tool
+write_xlsx(macro_deg,"/data/hongjy/06GA/macro_deg.xlsx")
+
+### DAVID ##
+https://david.ncifcrf.gov/summary.jsp
