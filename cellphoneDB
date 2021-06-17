@@ -1,0 +1,755 @@
+library(pheatmap)
+
+######################### mk cellphone DB input data ############################
+
+gene_count_matrix<-immune.combined_annotated@assays$RNA@counts %>% as.data.frame()
+
+cell_anno<-immune.combined_annotated$Condition %>% as.data.frame()
+colnames(cell_anno)<-"Data"
+cell_anno$ID<-rownames(cell_anno)
+cell_anno<-cell_anno %>% mutate(Data=ifelse(Data%in%c("patient1","patient2","patient3"),"patient","normal"))
+patient_count<-gene_count_matrix[,cell_anno[cell_anno$Data=="patient",]$ID ]
+patient_count$Gene<-rownames(patient_count)
+patient_count<-patient_count %>% dplyr::select(Gene,everything())
+fwrite(patient_count,"../cellphoneDB/patient_count.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+normal_count<-gene_count_matrix[,cell_anno[cell_anno$Data=="normal",]$ID ]
+normal_count$Gene<-rownames(normal_count)
+normal_count<-normal_count %>% dplyr::select(Gene,everything())
+fwrite(normal_count,"../cellphoneDB/normal_count.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+
+annotated_cell_type<-immune.combined_annotated@active.ident %>% as.data.frame()
+annotated_cell_type$ID<-rownames(annotated_cell_type)
+
+cell_anno<-left_join(cell_anno,annotated_cell_type)
+colnames(cell_anno)<-c("Data","Cell","cell_type")
+
+patient_anno<-cell_anno %>% filter(Data=="patient") %>% dplyr::select(-Data) %>% fwrite("../cellphoneDB/patient.meta.txt",sep="\t",col.names=T,row.names = F,quote=F)
+normal_anno<-cell_anno %>% filter(Data=="normal") %>% dplyr::select(-Data) %>% fwrite("../cellphoneDB/normal.meta.txt",sep="\t",col.names=T,row.names = F,quote=F)
+
+
+################################################# cellphoneDB heatmap <patient sample>########################################################
+
+
+meta_file<-"/data/hongjy/06GA/cellphoneDB/patient/patient.meta.txt"
+count_filename<-"/data/hongjy/06GA/cellphoneDB/patient/patient_count.txt"
+pvalues_file<-"/data/hongjy/06GA/cellphoneDB/patient/out/pvalues.txt"
+log_filename<-"/data/hongjy/06GA/cellphoneDB/patient/out/log.txt"
+count_network_filename<-"/data/hongjy/06GA/cellphoneDB/patient/out/count_network.txt"
+interaction_count_filename<-"/data/hongjy/06GA/cellphoneDB/patient/out/interaction_count.txt"
+count_filename<-"/data/hongjy/06GA/cellphoneDB/patient/out/heatmap.pdf"
+
+heatmaps_plot = function(meta_file, pvalues_file, count_filename, log_filename, count_network_filename, interaction_count_filename, count_network_separator="\t", interaction_count_separator="\t", show_rownames = T, show_colnames = T,
+                         scale="none", cluster_cols = T,border_color='white', cluster_rows = T, fontsize_row=11,
+                         fontsize_col = 11, main = '',treeheight_row=0, family='Arial', treeheight_col = 0,
+                         col1 = "dodgerblue4", col2 = 'peachpuff', col3 = 'deeppink4', meta_sep='\t', pvalues_sep='\t', pvalue=0.05){
+  #######   Network
+  
+  meta = read.csv(meta_file, comment.char = '', sep=meta_sep)
+  
+  all_intr = read.table(pvalues_file, header=T, stringsAsFactors = F, sep=pvalues_sep, comment.char = '', check.names = F)
+  intr_pairs = all_intr$interacting_pair
+  all_intr = all_intr[,-c(1:11)]
+  
+  
+  split_sep = '\\|'
+  join_sep = '|'
+  
+  pairs1_all = unique(meta[,2])
+  
+  pairs1 = c()
+  for (i in 1:length(pairs1_all))
+    for (j in 1:length(pairs1_all))
+      pairs1 = c(pairs1,paste(pairs1_all[i],pairs1_all[j],sep=join_sep))
+  
+  all_count = matrix(ncol=3)
+  colnames(all_count) = c('SOURCE','TARGET','count')
+  count1 = c()
+  
+  for(i in 1:length(pairs1))
+  {
+    p1 = strsplit(pairs1[i], split_sep)[[1]][1]
+    p2 = strsplit(pairs1[i], split_sep)[[1]][2]
+    
+    n1 = intr_pairs[which(all_intr[,pairs1[i]]<=pvalue)]
+    pairs_rev = paste(p2, p1, sep=join_sep)
+    n2 = intr_pairs[which(all_intr[,pairs_rev]<=pvalue)]
+    
+    if(p1!=p2)
+      count1 = length(unique(n1))+length(unique(n2))
+    else
+      count1 = length(unique(n1))
+    
+    new_count = c(p1,p2,count1)
+    names(new_count) = c('SOURCE','TARGET','count')
+    all_count = rbind(all_count, new_count)
+  }
+  
+  all_count = all_count[-1,]
+  write.table(all_count, count_network_filename, sep=count_network_separator, quote=F, row.names = F)
+  
+  #######   count interactions
+  
+  count1 = c()
+  for(i in 1:length(pairs1))
+  {
+    p1 = strsplit(pairs1[i], split_sep)[[1]][1]
+    p2 = strsplit(pairs1[i], split_sep)[[1]][2]
+    
+    n1 = intr_pairs[which(all_intr[,pairs1[i]]<=pvalue)]
+    
+    pairs_rev = paste(p2, p1, sep=join_sep)
+    n2 = intr_pairs[which(all_intr[,pairs_rev]<=pvalue)]
+    if(p1!=p2)
+      count1 = c(count1,length(unique(n1))+length(unique(n2)))
+    else
+      count1 = c(count1,length(unique(n1)))
+    
+  }
+  
+  if (any(count1)>0)
+  {
+    count_matrix = matrix(count1, nrow=length(unique(meta[,2])), ncol=length(unique(meta[,2])))
+    rownames(count_matrix)= unique(meta[,2])
+    colnames(count_matrix)= unique(meta[,2])
+    
+    all_sum = rowSums(count_matrix)
+    all_sum = cbind(names(all_sum), all_sum)
+    write.table(all_sum, file=interaction_count_filename, quote=F, sep=count_network_separator, row.names=F)
+    
+    col.heatmap <- colorRampPalette(c(col1,col2,col3 ))( 1000 )
+    cell_type_arrange<-c("CD4 T cell","CD8 T cell","Treg cell","Tpro","B cell","NK cell","NK/T cell","Fibroblast","Myofibroblast","Macrophage","Dendritic Cell","Mast cell","Melanocyte","Erythrocyte",
+                         "Langerhans cell","Lymphatic Endothelial","Vascular Endothelial","Keratinocyte")
+    library(RColorBrewer)
+    count_matrix<-count_matrix[cell_type_arrange,cell_type_arrange]
+
+    count_matrix<-count_matrix*1.2
+    breaksList<-seq(0,300,1)
+    pheatmap(count_matrix, show_rownames = show_rownames, show_colnames = show_colnames, scale=scale, cluster_cols = F,
+             border_color=border_color, cluster_rows = F, fontsize_row = fontsize_row, fontsize_col = fontsize_col,
+             color = colorRampPalette(rev(brewer.pal(n = 100, name = "RdYlBu")))(length(breaksList)),
+             main = main, treeheight_row = treeheight_row, family = family, treeheight_col = treeheight_col,breaks = breaksList, filename = count_filename)
+    
+    pheatmap(log(count_matrix+1), show_rownames = show_rownames, show_colnames = show_colnames, scale=scale, cluster_cols = cluster_cols,
+             border_color=border_color, cluster_rows = cluster_rows, fontsize_row = fontsize_row, fontsize_col = fontsize_col,
+             main = main, treeheight_row = treeheight_row, family = family,color = col.heatmap, treeheight_col = treeheight_col, filename = log_filename)
+  } else {
+    stop("There are no significant results using p-value of: ", pvalue, call.=FALSE)
+  }
+}
+
+
+
+################################################# cellphoneDB heatmap <normal sample>########################################################
+
+
+meta_file<-"/data/hongjy/06GA/cellphoneDB/normal/normal.meta.txt"
+count_filename<-"/data/hongjy/06GA/cellphoneDB/normal/normal_count.txt"
+pvalues_file<-"/data/hongjy/06GA/cellphoneDB/normal/out/pvalues.txt"
+log_filename<-"/data/hongjy/06GA/cellphoneDB/normal/out/log.txt"
+count_network_filename<-"/data/hongjy/06GA/cellphoneDB/normal/out/count_network.txt"
+interaction_count_filename<-"/data/hongjy/06GA/cellphoneDB/normal/out/interaction_count.txt"
+count_filename<-"/data/hongjy/06GA/cellphoneDB/normal/out/heatmap.pdf"
+
+heatmaps_plot = function(meta_file, pvalues_file, count_filename, log_filename, count_network_filename, interaction_count_filename, count_network_separator="\t", interaction_count_separator="\t", show_rownames = T, show_colnames = T,
+                         scale="none", cluster_cols = T,border_color='white', cluster_rows = T, fontsize_row=11,
+                         fontsize_col = 11, main = '',treeheight_row=0, family='Arial', treeheight_col = 0,
+                         col1 = "dodgerblue4", col2 = 'peachpuff', col3 = 'deeppink4', meta_sep='\t', pvalues_sep='\t', pvalue=0.05){
+  #######   Network
+  
+  meta = read.csv(meta_file, comment.char = '', sep=meta_sep)
+  
+  all_intr = read.table(pvalues_file, header=T, stringsAsFactors = F, sep=pvalues_sep, comment.char = '', check.names = F)
+  intr_pairs = all_intr$interacting_pair
+  all_intr = all_intr[,-c(1:11)]
+  
+  
+  split_sep = '\\|'
+  join_sep = '|'
+  
+  pairs1_all = unique(meta[,2])
+  
+  pairs1 = c()
+  for (i in 1:length(pairs1_all))
+    for (j in 1:length(pairs1_all))
+      pairs1 = c(pairs1,paste(pairs1_all[i],pairs1_all[j],sep=join_sep))
+  
+  all_count = matrix(ncol=3)
+  colnames(all_count) = c('SOURCE','TARGET','count')
+  count1 = c()
+  
+  for(i in 1:length(pairs1))
+  {
+    p1 = strsplit(pairs1[i], split_sep)[[1]][1]
+    p2 = strsplit(pairs1[i], split_sep)[[1]][2]
+    
+    n1 = intr_pairs[which(all_intr[,pairs1[i]]<=pvalue)]
+    pairs_rev = paste(p2, p1, sep=join_sep)
+    n2 = intr_pairs[which(all_intr[,pairs_rev]<=pvalue)]
+    
+    if(p1!=p2)
+      count1 = length(unique(n1))+length(unique(n2))
+    else
+      count1 = length(unique(n1))
+    
+    new_count = c(p1,p2,count1)
+    names(new_count) = c('SOURCE','TARGET','count')
+    all_count = rbind(all_count, new_count)
+  }
+  
+  all_count = all_count[-1,]
+  write.table(all_count, count_network_filename, sep=count_network_separator, quote=F, row.names = F)
+  
+  #######   count interactions
+  
+  count1 = c()
+  for(i in 1:length(pairs1))
+  {
+    p1 = strsplit(pairs1[i], split_sep)[[1]][1]
+    p2 = strsplit(pairs1[i], split_sep)[[1]][2]
+    
+    n1 = intr_pairs[which(all_intr[,pairs1[i]]<=pvalue)]
+    
+    pairs_rev = paste(p2, p1, sep=join_sep)
+    n2 = intr_pairs[which(all_intr[,pairs_rev]<=pvalue)]
+    if(p1!=p2)
+      count1 = c(count1,length(unique(n1))+length(unique(n2)))
+    else
+      count1 = c(count1,length(unique(n1)))
+    
+  }
+  
+  if (any(count1)>0)
+  {
+    count_matrix = matrix(count1, nrow=length(unique(meta[,2])), ncol=length(unique(meta[,2])))
+    rownames(count_matrix)= unique(meta[,2])
+    colnames(count_matrix)= unique(meta[,2])
+    
+    all_sum = rowSums(count_matrix)
+    all_sum = cbind(names(all_sum), all_sum)
+    write.table(all_sum, file=interaction_count_filename, quote=F, sep=count_network_separator, row.names=F)
+    
+    col.heatmap <- colorRampPalette(c(col1,col2,col3 ))( 1000 )
+    cell_type_arrange<-c("CD4 T cell","CD8 T cell","Treg cell","Tpro","B cell","NK cell","NK/T cell","Fibroblast","Myofibroblast","Macrophage","Dendritic Cell","Mast cell","Melanocyte","Erythrocyte",
+                         "Langerhans cell","Lymphatic Endothelial","Vascular Endothelial","Keratinocyte")
+    library(RColorBrewer)
+    count_matrix<-count_matrix[cell_type_arrange,cell_type_arrange]
+
+    count_matrix<-count_matrix*1.28
+    
+    breaksList<-seq(0,300,1)
+    pheatmap(count_matrix, show_rownames = show_rownames, show_colnames = show_colnames, scale=scale, cluster_cols = F,
+             border_color=border_color, cluster_rows = F, fontsize_row = fontsize_row, fontsize_col = fontsize_col,
+             color = colorRampPalette(rev(brewer.pal(n = 100, name = "RdYlBu")))(length(breaksList)),
+             main = main, treeheight_row = treeheight_row, family = family, treeheight_col = treeheight_col,breaks = breaksList, filename = count_filename)
+    
+    pheatmap(log(count_matrix+1), show_rownames = show_rownames, show_colnames = show_colnames, scale=scale, cluster_cols = cluster_cols,
+             border_color=border_color, cluster_rows = cluster_rows, fontsize_row = fontsize_row, fontsize_col = fontsize_col,
+             main = main, treeheight_row = treeheight_row, family = family,color = col.heatmap, treeheight_col = treeheight_col, filename = log_filename)
+  } else {
+    stop("There are no significant results using p-value of: ", pvalue, call.=FALSE)
+  }
+}
+
+############################ select interested cell-cell interaction & regand-receptor pairs APCs ##################################
+
+
+
+getwd()
+setwd("/data/hongjy/06GA/cellphoneDB/patient/out/")
+patient.means<-fread("means.txt")
+patient.means %>% dplyr::select(secreted)
+
+patient.means<-patient.means %>% gather(key="interactioncell",value="p.score",-id_cp_interaction,-interacting_pair,-partner_a,-partner_b,-gene_a,-gene_b,secreted,-receptor_a,
+                                        -receptor_b,-annotation_strategy,-is_integrin,-secreted)
+
+patient.pvalues<-fread("pvalues.txt") %>% gather(key="interactioncell",value="p.pvalue",-id_cp_interaction,-interacting_pair,-partner_a,-partner_b,-gene_a,-gene_b,secreted,-receptor_a,
+                                                 -receptor_b,-annotation_strategy,-is_integrin,-secreted)
+
+patient<-left_join(patient.means,patient.pvalues)
+
+
+
+patient<-patient %>% mutate(left_cell=gsub("([^\\|]+)\\|[^\\|]+","\\1",interactioncell),
+                            right_cell=gsub("[^\\|]+\\|([^\\|]+)","\\1",interactioncell)) %>% filter(left_cell!=right_cell) %>% dplyr::select(-interactioncell)
+
+patient %>% filter(left_cell=="Tpro" | right_cell =="Tpro") %>% arrange(desc(p.score)) %>% filter(p.pvalue<=0.05)
+
+
+
+setwd("/data/hongjy/06GA/cellphoneDB/normal/out/")
+normal.means<-fread("means.txt")
+
+normal.means<-normal.means %>% gather(key="interactioncell",value="n.score",-id_cp_interaction,-interacting_pair,-partner_a,-partner_b,-gene_a,-gene_b,secreted,-receptor_a,
+                                      -receptor_b,-annotation_strategy,-is_integrin,-secreted)
+
+normal.pvalues<-fread("pvalues.txt") %>% gather(key="interactioncell",value="n.pvalue",-id_cp_interaction,-interacting_pair,-partner_a,-partner_b,-gene_a,-gene_b,secreted,-receptor_a,
+                                                -receptor_b,-annotation_strategy,-is_integrin,-secreted)
+
+normal<-left_join(normal.means,normal.pvalues)
+
+
+
+normal<-normal %>% mutate(left_cell=gsub("([^\\|]+)\\|[^\\|]+","\\1",interactioncell),
+                          right_cell=gsub("[^\\|]+\\|([^\\|]+)","\\1",interactioncell)) %>% filter(left_cell!=right_cell) %>% dplyr::select(-interactioncell)
+
+normal %>% filter(left_cell=="Tpro" | right_cell =="Tpro") %>% arrange(desc(n.score)) %>% filter(n.pvalue<=0.05) 
+
+total.score<-full_join(patient,normal) %>% dplyr::select(-id_cp_interaction,-partner_a,-partner_b,interacting_pair,-annotation_strategy)
+
+total.score<-total.score %>% mutate(diff=log2(p.score+1)-log2(n.score+1)) %>% arrange(desc(diff),n.score) %>% filter(p.pvalue<=0.05,gene_b!="",gene_a!="") %>% 
+  filter((left_cell%in%c("Lymphatic Endothelial","Vascular Endothelial") & right_cell%in%c("Fibroblast","Macrophage") )|
+           (right_cell%in%c("Lymphatic Endothelial","Vascular Endothelial") & left_cell%in% c("Fibroblast","Macrophage"))) %>%
+  filter(!(receptor_a==TRUE & receptor_b==TRUE )) %>% 
+  filter(diff>=1.1)
+
+#write_xlsx(total.score,"/data/hongjy/06GA/cellphoneDB/Macrophage_Fibroblast_cellphoneDB.xlsx")
+
+
+## cellphoneDB marker UMAP
+
+for(i in 1:length(for_umap_gene)){
+  FeaturePlot(asas, features = for_umap_gene[i],split.by = "Condition",keep.scale = 'all',cols = c("grey70","red"))+theme(legend.position = c(0.95,0.95),
+                                                                                                                          legend.key.size = unit(0.33, 'cm'),
+                                                                                                                          legend.text = element_text(size=9))
+  ggsave(paste0("/data/hongjy/06GA/cellphoneDB/UMAP/",for_umap_gene[i],"_UMAP.png"), width = 7, height = 3)
+  
+  
+}
+
+## Normal
+
+setwd("/data/hongjy/06GA/cellphoneDB/normal/out")
+
+a<-fread("means.txt") 
+a<-a %>% dplyr::select(id_cp_interaction:is_integrin,`Lymphatic Endothelial|Fibroblast`,
+                       `Fibroblast|Lymphatic Endothelial`,
+                       `Vascular Endothelial|Fibroblast`,
+                       `Fibroblast|Vascular Endothelial`,`Fibroblast|Fibroblast`,
+                       `Lymphatic Endothelial|Macrophage`,
+                       `Macrophage|Lymphatic Endothelial`,
+                       `Vascular Endothelial|Macrophage`,
+                       `Macrophage|Vascular Endothelial`,`Macrophage|Macrophage`)
+fwrite(a,"endothelial_fibroblast_macrophage_means.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+b<-fread("pvalues.txt")
+b<-b %>% dplyr::select(id_cp_interaction:is_integrin,`Lymphatic Endothelial|Fibroblast`,
+                       `Fibroblast|Lymphatic Endothelial`,
+                       `Vascular Endothelial|Fibroblast`,
+                       `Fibroblast|Vascular Endothelial`,`Fibroblast|Fibroblast`,
+                       `Lymphatic Endothelial|Macrophage`,
+                       `Macrophage|Lymphatic Endothelial`,
+                       `Vascular Endothelial|Macrophage`,
+                       `Macrophage|Vascular Endothelial`,`Macrophage|Macrophage`)
+fwrite(b,"endothelial_fibroblast_macrophage_pvalues.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+
+## Patient
+setwd("/data/hongjy/06GA/cellphoneDB/patient/out")
+a<-fread("means.txt") 
+a<-a %>% dplyr::select(id_cp_interaction:is_integrin,`Lymphatic Endothelial|Fibroblast`,
+                       `Fibroblast|Lymphatic Endothelial`,
+                       `Vascular Endothelial|Fibroblast`,
+                       `Fibroblast|Vascular Endothelial`,`Fibroblast|Fibroblast`,
+                       `Lymphatic Endothelial|Macrophage`,
+                       `Macrophage|Lymphatic Endothelial`,
+                       `Vascular Endothelial|Macrophage`,
+                       `Macrophage|Vascular Endothelial`,`Macrophage|Macrophage`)
+fwrite(a,"endothelial_fibroblast_macrophage_means.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+
+b<-fread("pvalues.txt")
+b<-b %>% dplyr::select(id_cp_interaction:is_integrin,`Lymphatic Endothelial|Fibroblast`,
+                       `Fibroblast|Lymphatic Endothelial`,
+                       `Vascular Endothelial|Fibroblast`,
+                       `Fibroblast|Vascular Endothelial`,`Fibroblast|Fibroblast`,
+                       `Lymphatic Endothelial|Macrophage`,
+                       `Macrophage|Lymphatic Endothelial`,
+                       `Vascular Endothelial|Macrophage`,
+                       `Macrophage|Vascular Endothelial`,`Macrophage|Macrophage`)
+fwrite(b,"endothelial_fibroblast_macrophage_pvalues.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+
+############################################## cellphoneDB dotplot <normal sample> APCs ##############################################
+
+
+
+##normal path
+setwd("/data/hongjy/06GA/cellphoneDB/normal/out")
+
+##option setting
+selected_rows = NULL
+selected_columns = NULL
+filename = 'endothelial_fibroblast_macrophage_plot_normal.pdf'
+width = 8
+height = 10
+means_path = 'endothelial_fibroblast_macrophage_means.txt'
+pvalues_path = 'endothelial_fibroblast_macrophage_pvalues.txt'
+means_separator = '\t'
+pvalues_separator = '\t'
+output_extension = '.pdf'
+
+all_pval = read.table(pvalues_path, header=T, stringsAsFactors = F, sep=means_separator, comment.char = '', check.names=F)
+all_pval = all_pval %>% filter(interacting_pair%in%total.score$interacting_pair) ## select interested pair
+
+all_means = read.table(means_path, header=T, stringsAsFactors = F, sep=pvalues_separator, comment.char = '', check.names=F)
+all_means = all_means %>% filter(interacting_pair%in%total.score$interacting_pair) ## select interested pair
+
+intr_pairs = all_pval$interacting_pair
+all_pval = all_pval[,-c(1:11)]
+all_means = all_means[,-c(1:11)]
+
+if(is.null(selected_rows)){
+  selected_rows = intr_pairs
+}
+
+if(is.null(selected_columns)){
+  selected_columns = colnames(all_pval)
+}
+
+sel_pval = all_pval[match(selected_rows, intr_pairs), selected_columns]
+sel_means = all_means[match(selected_rows, intr_pairs), selected_columns]
+
+df_names = expand.grid(selected_rows, selected_columns)
+pval = unlist(sel_pval)
+pval[pval==0] = 0.0009
+plot.data = cbind(df_names,pval)
+pr = unlist(as.data.frame(sel_means))
+pr[pr==0] = 1
+plot.data = cbind(plot.data,log2(pr))
+colnames(plot.data) = c('pair', 'clusters', 'pvalue', 'mean')
+
+my_palette <- colorRampPalette(c("black", "blue", "yellow", "red"), alpha=TRUE)(n=399)
+
+ggplot(plot.data,aes(x=clusters,y=pair)) +
+  geom_point(aes(size=-log10(pvalue),color=mean)) +
+  scale_color_gradientn('Log2 mean (Molecule 1, Molecule 2)', colors=my_palette, limits=c(-7,7),breaks=seq(-7,7,2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=14, colour = "black"),
+        axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(size=12, colour = "black"),
+        axis.title=element_blank(),
+        panel.border = element_rect(size = 0.7, linetype = "solid", colour = "black"))
+
+
+ggsave(filename, width = width, height = height, device = cairo_pdf, limitsize=F)
+
+
+
+############################################## cellphoneDB dotplot <patient sample> APCs ##############################################
+
+
+##patient path
+setwd("/data/hongjy/06GA/cellphoneDB/patient/out")
+
+##option setting
+selected_rows = NULL
+selected_columns = NULL
+filename = 'endothelial_fibroblast_macrophage_plot_patient.pdf'
+width = 8
+height = 10
+means_path = 'endothelial_fibroblast_macrophage_means.txt'
+pvalues_path = 'endothelial_fibroblast_macrophage_pvalues.txt'
+means_separator = '\t'
+pvalues_separator = '\t'
+output_extension = '.pdf'
+
+all_pval = read.table(pvalues_path, header=T, stringsAsFactors = F, sep=means_separator, comment.char = '', check.names=F)
+all_pval = all_pval %>% filter(interacting_pair%in%total.score$interacting_pair) ## select interested pair
+
+all_means = read.table(means_path, header=T, stringsAsFactors = F, sep=pvalues_separator, comment.char = '', check.names=F)
+all_means = all_means %>% filter(interacting_pair%in%total.score$interacting_pair) ## select interested pair
+
+intr_pairs = all_pval$interacting_pair
+all_pval = all_pval[,-c(1:11)]
+all_means = all_means[,-c(1:11)]
+
+if(is.null(selected_rows)){
+  selected_rows = intr_pairs
+}
+
+if(is.null(selected_columns)){
+  selected_columns = colnames(all_pval)
+}
+
+sel_pval = all_pval[match(selected_rows, intr_pairs), selected_columns]
+sel_means = all_means[match(selected_rows, intr_pairs), selected_columns]
+
+df_names = expand.grid(selected_rows, selected_columns)
+pval = unlist(sel_pval)
+pval[pval==0] = 0.0009
+plot.data = cbind(df_names,pval)
+pr = unlist(as.data.frame(sel_means))
+pr[pr==0] = 1
+plot.data = cbind(plot.data,log2(pr))
+colnames(plot.data) = c('pair', 'clusters', 'pvalue', 'mean')
+
+my_palette <- colorRampPalette(c("black", "blue", "yellow", "red"), alpha=TRUE)(n=399)
+
+ggplot(plot.data,aes(x=clusters,y=pair)) +
+  geom_point(aes(size=-log10(pvalue),color=mean)) +
+  scale_color_gradientn('Log2 mean (Molecule 1, Molecule 2)', colors=my_palette, limits=c(-7,7),breaks=seq(-7,7,2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=14, colour = "black"),
+        axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(size=12, colour = "black"),
+        axis.title=element_blank(),
+        panel.border = element_rect(size = 0.7, linetype = "solid", colour = "black"))
+
+
+ggsave(filename, width = width, height = height, device = cairo_pdf, limitsize=F)
+
+
+#############################################cellphoneDB for T cell ####################################################
+
+
+getwd()
+setwd("/data/hongjy/06GA/cellphoneDB/patient/out/")
+patient.means<-fread("means.txt")
+
+patient.means<-patient.means %>% gather(key="interactioncell",value="p.score",-id_cp_interaction,-interacting_pair,-partner_a,-partner_b,-gene_a,-gene_b,secreted,-receptor_a,
+                                        -receptor_b,-annotation_strategy,-is_integrin,-secreted)
+
+patient.pvalues<-fread("pvalues.txt") %>% gather(key="interactioncell",value="p.pvalue",-id_cp_interaction,-interacting_pair,-partner_a,-partner_b,-gene_a,-gene_b,secreted,-receptor_a,
+                                                 -receptor_b,-annotation_strategy,-is_integrin,-secreted)
+
+patient<-left_join(patient.means,patient.pvalues)
+
+
+
+patient<-patient %>% mutate(left_cell=gsub("([^\\|]+)\\|[^\\|]+","\\1",interactioncell),
+                            right_cell=gsub("[^\\|]+\\|([^\\|]+)","\\1",interactioncell)) %>% filter(left_cell!=right_cell) %>% dplyr::select(-interactioncell)
+
+
+setwd("/data/hongjy/06GA/cellphoneDB/normal/out/")
+normal.means<-fread("means.txt")
+
+normal.means<-normal.means %>% gather(key="interactioncell",value="n.score",-id_cp_interaction,-interacting_pair,-partner_a,-partner_b,-gene_a,-gene_b,secreted,-receptor_a,
+                                      -receptor_b,-annotation_strategy,-is_integrin,-secreted)
+
+normal.pvalues<-fread("pvalues.txt") %>% gather(key="interactioncell",value="n.pvalue",-id_cp_interaction,-interacting_pair,-partner_a,-partner_b,-gene_a,-gene_b,secreted,-receptor_a,
+                                                -receptor_b,-annotation_strategy,-is_integrin,-secreted)
+
+normal<-left_join(normal.means,normal.pvalues)
+
+
+
+normal<-normal %>% mutate(left_cell=gsub("([^\\|]+)\\|[^\\|]+","\\1",interactioncell),
+                          right_cell=gsub("[^\\|]+\\|([^\\|]+)","\\1",interactioncell)) %>% filter(left_cell!=right_cell) %>% dplyr::select(-interactioncell)
+
+normal %>% filter(left_cell=="Tpro" | right_cell =="Tpro") %>% arrange(desc(n.score)) %>% filter(n.pvalue<=0.05) 
+
+total.score.forT<-full_join(patient,normal) %>% dplyr::select(-id_cp_interaction,-partner_a,-partner_b,interacting_pair,-annotation_strategy)
+
+total.score.forT<-total.score.forT %>% 
+  filter((left_cell%in%c("CD4 T cell","CD8 T cell","Tpro","Treg cell") & right_cell%in%c("Fibroblast","Macrophage") )|
+           (right_cell%in%c("CD4 T cell","CD8 T cell","Tpro","Treg cell")& left_cell%in%c("Fibr
+                                                                                        oblast","Macrophage")))
+
+total.score.forT<-total.score.forT %>% mutate(diff=log2(p.score+1)-log2(n.score+1)) %>%
+  arrange(desc(diff),n.score) %>% filter(p.pvalue<=0.05,gene_b!="",gene_a!="") %>%  
+  filter(!(receptor_a==TRUE & receptor_b==TRUE )) %>% 
+  filter(diff>=1.1)
+
+
+write_xlsx(total.score.forT,"/data/hongjy/06GA/cellphoneDB/Tcell_cellphoneDB.xlsx")
+
+
+###############################################################################################
+setwd("/data/hongjy/06GA/cellphoneDB/normal/out")
+a<-fread("means.txt") 
+a<-a %>% dplyr::select(id_cp_interaction:is_integrin,`CD4 T cell|Fibroblast`,`Fibroblast|CD4 T cell`,
+                    `CD4 T cell|Macrophage`,`Macrophage|CD4 T cell`,
+                    `CD8 T cell|Fibroblast`,`Fibroblast|CD8 T cell`,
+                    `CD8 T cell|Macrophage`,`Macrophage|CD8 T cell`,
+                    `Tpro|Fibroblast`,`Fibroblast|Tpro`,
+                    `Tpro|Macrophage`,`Macrophage|Tpro`,
+                    `Treg cell|Fibroblast`,`Fibroblast|Treg cell`,
+                    `Treg cell|Macrophage`,`Macrophage|Treg cell`)
+
+
+fwrite(a,"Tcell_means.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+b<-fread("pvalues.txt")
+b<-b %>% dplyr::select(id_cp_interaction:is_integrin,`CD4 T cell|Fibroblast`,`Fibroblast|CD4 T cell`,
+                       `CD4 T cell|Macrophage`,`Macrophage|CD4 T cell`,
+                       `CD8 T cell|Fibroblast`,`Fibroblast|CD8 T cell`,
+                       `CD8 T cell|Macrophage`,`Macrophage|CD8 T cell`,
+                       `Tpro|Fibroblast`,`Fibroblast|Tpro`,
+                       `Tpro|Macrophage`,`Macrophage|Tpro`,
+                       `Treg cell|Fibroblast`,`Fibroblast|Treg cell`,
+                       `Treg cell|Macrophage`,`Macrophage|Treg cell`)
+fwrite(b,"Tcell_pvalues.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+setwd("/data/hongjy/06GA/cellphoneDB/patient/out")
+a<-fread("means.txt") 
+a<-a %>% dplyr::select(id_cp_interaction:is_integrin,`CD4 T cell|Fibroblast`,`Fibroblast|CD4 T cell`,
+                       `CD4 T cell|Macrophage`,`Macrophage|CD4 T cell`,
+                       `CD8 T cell|Fibroblast`,`Fibroblast|CD8 T cell`,
+                       `CD8 T cell|Macrophage`,`Macrophage|CD8 T cell`,
+                       `Tpro|Fibroblast`,`Fibroblast|Tpro`,
+                       `Tpro|Macrophage`,`Macrophage|Tpro`,
+                       `Treg cell|Fibroblast`,`Fibroblast|Treg cell`,
+                       `Treg cell|Macrophage`,`Macrophage|Treg cell`)
+fwrite(a,"Tcell_means.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+
+b<-fread("pvalues.txt")
+b<-b %>% dplyr::select(id_cp_interaction:is_integrin,`CD4 T cell|Fibroblast`,`Fibroblast|CD4 T cell`,
+                       `CD4 T cell|Macrophage`,`Macrophage|CD4 T cell`,
+                       `CD8 T cell|Fibroblast`,`Fibroblast|CD8 T cell`,
+                       `CD8 T cell|Macrophage`,`Macrophage|CD8 T cell`,
+                       `Tpro|Fibroblast`,`Fibroblast|Tpro`,
+                       `Tpro|Macrophage`,`Macrophage|Tpro`,
+                       `Treg cell|Fibroblast`,`Fibroblast|Treg cell`,
+                       `Treg cell|Macrophage`,`Macrophage|Treg cell`)
+fwrite(b,"Tcell_pvalues.txt",sep="\t",col.names = T,row.names = F,quote=F)
+
+
+#######################################
+
+### function dot_plot 
+
+
+##normal path
+setwd("/data/hongjy/06GA/cellphoneDB/normal/out")
+
+##option setting
+selected_rows = NULL
+selected_columns = NULL
+filename = 'Tcell_plot_normal.pdf'
+width = 8
+height = 10
+means_path = 'Tcell_means.txt'
+pvalues_path = 'Tcell_pvalues.txt'
+means_separator = '\t'
+pvalues_separator = '\t'
+output_extension = '.pdf'
+
+all_pval = read.table(pvalues_path, header=T, stringsAsFactors = F, sep=means_separator, comment.char = '', check.names=F)
+all_pval = all_pval %>% filter(interacting_pair%in%total.score.forT$interacting_pair) ## select interested pair
+
+all_means = read.table(means_path, header=T, stringsAsFactors = F, sep=pvalues_separator, comment.char = '', check.names=F)
+all_means = all_means %>% filter(interacting_pair%in%total.score.forT$interacting_pair) ## select interested pair
+
+intr_pairs = all_pval$interacting_pair
+all_pval = all_pval[,-c(1:11)]
+all_means = all_means[,-c(1:11)]
+
+if(is.null(selected_rows)){
+  selected_rows = intr_pairs
+}
+
+if(is.null(selected_columns)){
+  selected_columns = colnames(all_pval)
+}
+
+sel_pval = all_pval[match(selected_rows, intr_pairs), selected_columns]
+sel_means = all_means[match(selected_rows, intr_pairs), selected_columns]
+
+df_names = expand.grid(selected_rows, selected_columns)
+pval = unlist(sel_pval)
+pval[pval==0] = 0.0009
+plot.data = cbind(df_names,pval)
+pr = unlist(as.data.frame(sel_means))
+pr[pr==0] = 1
+plot.data = cbind(plot.data,log2(pr))
+colnames(plot.data) = c('pair', 'clusters', 'pvalue', 'mean')
+
+my_palette <- colorRampPalette(c("black", "blue", "yellow", "red"), alpha=TRUE)(n=399)
+
+ggplot(plot.data,aes(x=clusters,y=pair)) +
+  geom_point(aes(size=-log10(pvalue),color=mean)) +
+  scale_color_gradientn('Log2 mean (Molecule 1, Molecule 2)', colors=my_palette, limits=c(-6,6),breaks=seq(-6,6,2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=14, colour = "black"),
+        axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(size=12, colour = "black"),
+        axis.title=element_blank(),
+        panel.border = element_rect(size = 0.7, linetype = "solid", colour = "black"))
+
+
+ggsave(filename, width = width, height = height, device = cairo_pdf, limitsize=F)
+
+
+
+
+#####################################################################
+
+
+
+##patient path
+setwd("/data/hongjy/06GA/cellphoneDB/patient/out")
+
+##option setting
+selected_rows = NULL
+selected_columns = NULL
+filename = 'Tcell_plot_patient.pdf'
+width = 8
+height = 10
+means_path = 'Tcell_means.txt'
+pvalues_path = 'Tcell_pvalues.txt'
+means_separator = '\t'
+pvalues_separator = '\t'
+output_extension = '.pdf'
+
+all_pval = read.table(pvalues_path, header=T, stringsAsFactors = F, sep=means_separator, comment.char = '', check.names=F)
+all_pval = all_pval %>% filter(interacting_pair%in%total.score.forT$interacting_pair) ## select interested pair
+
+all_means = read.table(means_path, header=T, stringsAsFactors = F, sep=pvalues_separator, comment.char = '', check.names=F)
+all_means = all_means %>% filter(interacting_pair%in%total.score.forT$interacting_pair) ## select interested pair
+
+intr_pairs = all_pval$interacting_pair
+all_pval = all_pval[,-c(1:11)]
+all_means = all_means[,-c(1:11)]
+
+if(is.null(selected_rows)){
+  selected_rows = intr_pairs
+}
+
+if(is.null(selected_columns)){
+  selected_columns = colnames(all_pval)
+}
+
+sel_pval = all_pval[match(selected_rows, intr_pairs), selected_columns]
+sel_means = all_means[match(selected_rows, intr_pairs), selected_columns]
+
+df_names = expand.grid(selected_rows, selected_columns)
+pval = unlist(sel_pval)
+pval[pval==0] = 0.0009
+plot.data = cbind(df_names,pval)
+pr = unlist(as.data.frame(sel_means))
+pr[pr==0] = 1
+plot.data = cbind(plot.data,log2(pr))
+colnames(plot.data) = c('pair', 'clusters', 'pvalue', 'mean')
+
+my_palette <- colorRampPalette(c("black", "blue", "yellow", "red"), alpha=TRUE)(n=399)
+
+ggplot(plot.data,aes(x=clusters,y=pair)) +
+  geom_point(aes(size=-log10(pvalue),color=mean)) +
+  scale_color_gradientn('Log2 mean (Molecule 1, Molecule 2)', colors=my_palette, limits=c(-6,6),breaks=seq(-6,6,2)) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        axis.text=element_text(size=14, colour = "black"),
+        axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(size=12, colour = "black"),
+        axis.title=element_blank(),
+        panel.border = element_rect(size = 0.7, linetype = "solid", colour = "black"))
+
+
+ggsave(filename, width = width, height = height, device = cairo_pdf, limitsize=F)
+
+
+
+###################################################################################################
+
+
+
