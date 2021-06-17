@@ -493,3 +493,13 @@ condition_per_cluster_information<-condition_per_cluster_information %>%dplyr::s
 
 write_xlsx(condition_per_cluster_information,"GA-Normal_cell_type_percentage.xlsx")
 
+
+
+########IL21 & IFNG dotplot #################
+
+Tcell<-subset(immune.combined_annotated, idents = c("CD4 T cell","CD8 T cell","Treg cell","Tpro"))
+
+DotPlot(Tcell, features = c("IFNG","IL21"),group.by ="integrated_snn_res.1.5") + 
+  RotatedAxis()+ coord_flip()+scale_colour_gradient2(low = "grey", mid = "yellow", high = "red")
+
+
