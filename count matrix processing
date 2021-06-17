@@ -503,3 +503,5 @@ DotPlot(Tcell, features = c("IFNG","IL21"),group.by ="integrated_snn_res.1.5") +
   RotatedAxis()+ coord_flip()+scale_colour_gradient2(low = "grey", mid = "yellow", high = "red")
 
 
+
+
