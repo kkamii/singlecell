@@ -1,0 +1,495 @@
+library(dplyr)
+library(Seurat)
+library(SeuratData)
+library(tidyverse)
+library(data.table)
+library(patchwork)
+library(RColorBrewer)
+library(writexl)
+library(readxl)
+
+################3 patients , 3 normal sample ########################
+
+getwd()
+setwd("/data/hongjy/06GA/counts/")
+
+patient1<-Read10X("GA-p1/filtered_feature_bc_matrix/")
+
+patient1<-CreateSeuratObject(counts=patient1,project = "GA",min.cells = 3,min.features = 100)
+
+patient1[["percent.mt"]] <- PercentageFeatureSet(patient1, pattern = "^MT-")
+
+
+VlnPlot(patient1, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+plot1 <- FeatureScatter(patient1, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(patient1, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+patient1 <- subset(patient1, subset = nFeature_RNA > 200  & nFeature_RNA < 7500 & percent.mt < 20)
+patient1 <- NormalizeData(patient1, normalization.method = "LogNormalize", scale.factor = 10000)
+patient1 <- FindVariableFeatures(patient1, selection.method = "vst", nfeatures = 2000)
+
+top10 <- head(VariableFeatures(patient1), 10)
+
+plot1 <- VariableFeaturePlot(patient1)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+all.genes <- rownames(patient1)
+patient1 <- ScaleData(patient1, features = all.genes)
+
+patient1 <- RunPCA(patient1, features = VariableFeatures(object = patient1),npcs = 100)
+VizDimLoadings(patient1, dims = 1:2, reduction = "pca")
+
+patient1.j <- JackStraw(patient1, num.replicate = 100,dims=70)
+patient1.s <- ScoreJackStraw(patient1.j, dims = 1:70)
+
+JackStrawPlot(patient1.s, dims = 1:65)
+
+patient1.s <- FindNeighbors(patient1.s, dims = 1:60)
+patient1.s <- FindClusters(patient1.s, resolution = 0.5)
+
+patient1.s <- RunUMAP(patient1.s, dims = 1:60)
+DimPlot(patient1.s, reduction = "umap")
+
+#saveRDS(patient1.s, file = "patient1.rds")
+
+###############################################################################################
+#######################################patient2################################################
+###############################################################################################
+
+patient2<-Read10X("GA-p2/filtered_feature_bc_matrix/")
+
+patient2<-CreateSeuratObject(counts=patient2,project = "GA",min.cells = 3,min.features = 100)
+
+patient2[["percent.mt"]] <- PercentageFeatureSet(patient2, pattern = "^MT-")
+
+
+VlnPlot(patient2, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+plot1 <- FeatureScatter(patient2, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(patient2, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+
+patient2 <- subset(patient2, subset = nFeature_RNA > 200  & nFeature_RNA < 7500 & percent.mt < 20)
+patient2 <- NormalizeData(patient2, normalization.method = "LogNormalize", scale.factor = 10000)
+
+patient2 <- FindVariableFeatures(patient2, selection.method = "vst", nfeatures = 2000)
+
+
+top10 <- head(VariableFeatures(patient2), 10)
+plot1 <- VariableFeaturePlot(patient2)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+all.genes <- rownames(patient2)
+patient2 <- ScaleData(patient2, features = all.genes)
+
+
+patient2 <- RunPCA(patient2, features = VariableFeatures(object = patient2),npcs = 100)
+VizDimLoadings(patient2, dims = 1:2, reduction = "pca")
+
+
+patient2.j <- JackStraw(patient2, num.replicate = 100,dims=70)
+patient2.s <- ScoreJackStraw(patient2.j, dims = 1:70)
+
+JackStrawPlot(patient2.s, dims = 1:60)  
+
+patient2.s <- FindNeighbors(patient2.s, dims = 1:60)
+patient2.s <- FindClusters(patient2.s, resolution = 0.5)
+
+
+patient2.s <- RunUMAP(patient2.s, dims = 1:60)
+DimPlot(patient2.s, reduction = "umap")
+
+#saveRDS(patient2.s, file = "patient2.rds")
+
+###############################################################################################
+#######################################patient3################################################
+###############################################################################################
+
+patient3<-Read10X("GA-p3/filtered_feature_bc_matrix/")
+
+patient3<-CreateSeuratObject(counts=patient3,project = "GA",min.cells = 3,min.features = 100)
+
+patient3[["percent.mt"]] <- PercentageFeatureSet(patient3, pattern = "^MT-")
+
+VlnPlot(patient3, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+plot1 <- FeatureScatter(patient3, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(patient3, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+
+patient3 <- subset(patient3, subset = nFeature_RNA > 200  & nFeature_RNA < 7500 & percent.mt < 20)
+patient3 <- NormalizeData(patient3, normalization.method = "LogNormalize", scale.factor = 10000)
+
+patient3 <- FindVariableFeatures(patient3, selection.method = "vst", nfeatures = 2000)
+
+top10 <- head(VariableFeatures(patient3), 10)
+
+plot1 <- VariableFeaturePlot(patient3)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+all.genes <- rownames(patient3)
+patient3 <- ScaleData(patient3, features = all.genes)
+
+patient3 <- RunPCA(patient3, features = VariableFeatures(object = patient3),npcs = 100)
+
+VizDimLoadings(patient3, dims = 1:2, reduction = "pca")
+
+patient3.j <- JackStraw(patient3, num.replicate = 100,dims=70)
+patient3.s <- ScoreJackStraw(patient3.j, dims = 1:70)
+
+JackStrawPlot(patient3.s, dims = 1:60)  ## 60
+
+patient3.s <- FindNeighbors(patient3.s, dims = 1:60)
+patient3.s <- FindClusters(patient3.s, resolution = 0.5)
+
+patient3.s <- RunUMAP(patient3.s, dims = 1:60)
+
+DimPlot(patient3.s, reduction = "umap")
+
+#saveRDS(patient3.s, file = "patient3.rds")
+
+###############################################################################################
+#######################################normal1################################################
+###############################################################################################
+
+normal1<-Read10X("normal1/filtered_feature_bc_matrix/")
+
+normal1<-CreateSeuratObject(counts=normal1,project = "GA",min.cells = 3,min.features = 100)
+
+normal1[["percent.mt"]] <- PercentageFeatureSet(normal1, pattern = "^MT-")
+
+
+VlnPlot(normal1, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+plot1 <- FeatureScatter(normal1, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(normal1, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+
+normal1 <- subset(normal1, subset = nFeature_RNA > 200  & nFeature_RNA < 7500 & percent.mt < 20)
+normal1 <- NormalizeData(normal1, normalization.method = "LogNormalize", scale.factor = 10000)
+
+normal1 <- FindVariableFeatures(normal1, selection.method = "vst", nfeatures = 2000)
+
+top10 <- head(VariableFeatures(normal1), 10)
+
+plot1 <- VariableFeaturePlot(normal1)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+all.genes <- rownames(normal1)
+normal1 <- ScaleData(normal1, features = all.genes)
+
+
+normal1 <- RunPCA(normal1, features = VariableFeatures(object = normal1),npcs = 100)
+VizDimLoadings(normal1, dims = 1:2, reduction = "pca")
+
+normal1.j <- JackStraw(normal1, num.replicate = 100,dims=70)
+normal1@reductions$pca
+normal1.s <- ScoreJackStraw(normal1.j, dims = 1:70)
+
+JackStrawPlot(normal1.s, dims = 1:40)  
+
+normal1.s <- FindNeighbors(normal1.s, dims = 1:40)
+normal1.s <- FindClusters(normal1.s, resolution = 0.5)
+normal1.s <- RunUMAP(normal1.s, dims = 1:40)
+
+DimPlot(normal1.s, reduction = "umap")
+
+#saveRDS(normal1.s, file = "normal1.rds")
+
+###############################################################################################
+#######################################normal2#################################################
+###############################################################################################
+
+normal2<-Read10X("normal2/filtered_feature_bc_matrix/")
+
+normal2<-CreateSeuratObject(counts=normal2,project = "GA",min.cells = 3,min.features = 100)
+
+normal2[["percent.mt"]] <- PercentageFeatureSet(normal2, pattern = "^MT-")
+
+
+VlnPlot(normal2, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+plot1 <- FeatureScatter(normal2, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(normal2, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+
+normal2 <- subset(normal2, subset = nFeature_RNA > 200  & nFeature_RNA < 7500 & percent.mt < 20)
+normal2 <- NormalizeData(normal2, normalization.method = "LogNormalize", scale.factor = 10000)
+
+normal2 <- FindVariableFeatures(normal2, selection.method = "vst", nfeatures = 2000)
+
+top10 <- head(VariableFeatures(normal2), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(normal2)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+all.genes <- rownames(normal2)
+normal2 <- ScaleData(normal2, features = all.genes)
+
+normal2 <- RunPCA(normal2, features = VariableFeatures(object = normal2),npcs = 100)
+
+VizDimLoadings(normal2, dims = 1:2, reduction = "pca")
+
+normal2.j <- JackStraw(normal2, num.replicate = 100,dims=70)
+normal2.s <- ScoreJackStraw(normal2.j, dims = 1:70)
+
+JackStrawPlot(normal2.s, dims = 1:60)  
+
+normal2.s <- FindNeighbors(normal2.s, dims = 1:60)
+normal2.s <- FindClusters(normal2.s, resolution = 0.5)
+
+normal2.s <- RunUMAP(normal2.s, dims = 1:60)
+
+DimPlot(normal2.s, reduction = "umap")
+
+#saveRDS(normal2.s, file = "normal2.rds")
+
+###############################################################################################
+#######################################normal3#################################################
+###############################################################################################
+
+normal3<-Read10X("normal3/filtered_feature_bc_matrix/")
+
+normal3<-CreateSeuratObject(counts=normal3,project = "GA",min.cells = 3,min.features = 100)
+
+normal3[["percent.mt"]] <- PercentageFeatureSet(normal3, pattern = "^MT-")
+
+
+VlnPlot(normal3, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+plot1 <- FeatureScatter(normal3, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(normal3, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+
+normal3 <- subset(normal3, subset = nFeature_RNA > 200  & nFeature_RNA < 7500 & percent.mt < 20)
+normal3 <- NormalizeData(normal3, normalization.method = "LogNormalize", scale.factor = 10000)
+normal3 <- FindVariableFeatures(normal3, selection.method = "vst", nfeatures = 2000)
+
+top10 <- head(VariableFeatures(normal3), 10)
+
+plot1 <- VariableFeaturePlot(normal3)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+all.genes <- rownames(normal3)
+normal3 <- ScaleData(normal3, features = all.genes)
+normal3 <- RunPCA(normal3, features = VariableFeatures(object = normal3),npcs = 100)
+VizDimLoadings(normal3, dims = 1:2, reduction = "pca")
+
+normal3.j <- JackStraw(normal3, num.replicate = 100,dims=70)
+normal3@reductions$pca
+normal3.s <- ScoreJackStraw(normal3.j, dims = 1:70)
+
+JackStrawPlot(normal3.s, dims = 1:40) 
+
+ElbowPlot(normal3.s,ndims = 70)
+
+normal3.s <- FindNeighbors(normal3.s, dims = 1:40)
+normal3.s <- FindClusters(normal3.s, resolution = 0.5)
+
+normal3.s <- RunUMAP(normal3.s, dims = 1:40)
+
+DimPlot(normal3.s, reduction = "umap")
+
+#saveRDS(normal3.s, file = "normal3.rds")
+
+
+
+
+#########################################################################################
+###################################integration###########################################
+#########################################################################################
+
+cell_names<-c(names(patient1$nCount_RNA),names(patient2$nCount_RNA),names(patient3$nCount_RNA),
+              names(normal1$nCount_RNA),names(normal2$nCount_RNA),names(normal3$nCount_RNA))
+
+batch_names<-c(rep("patient1",length(names(patient1$nCount_RNA))),
+               rep("patient2",length(names(patient2$nCount_RNA))),
+               rep("patient3",length(names(patient3$nCount_RNA))),
+               rep("normal1",length(names(normal1$nCount_RNA))),
+               rep("normal2",length(names(normal2$nCount_RNA))),
+               rep("normal3",length(names(normal3$nCount_RNA))))
+
+patient1 <- AddMetaData(patient1, metadata="patient1", col.name="Condition")
+patient2 <- AddMetaData(patient2, metadata="patient2", col.name="Condition")
+patient3 <- AddMetaData(patient3, metadata="patient3", col.name="Condition")
+normal1 <- AddMetaData(normal1, metadata="normal1", col.name="Condition")
+normal2 <- AddMetaData(normal2, metadata="normal2", col.name="Condition")
+normal3 <- AddMetaData(normal3, metadata="normal3", col.name="Condition")
+
+
+integration.list<-list(patient1,patient2,patient3,normal1,normal2,normal3)
+
+names(integration.list)<-c("patient1","patient2","patient3","normal1","normal2","normal3")
+
+
+integration.list <- lapply(X = integration.list, FUN = function(x) {
+  x <- NormalizeData(x)
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+
+features <- SelectIntegrationFeatures(object.list = integration.list)
+
+immune.anchors <- FindIntegrationAnchors(object.list = integration.list, anchor.features = features)
+
+immune.combined <- IntegrateData(anchorset = immune.anchors)
+
+
+DefaultAssay(immune.combined) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+immune.combined <- ScaleData(immune.combined, verbose = FALSE)
+immune.combined <- RunPCA(immune.combined, npcs = 60, verbose = FALSE)
+
+immune.combined <- JackStraw(immune.combined, num.replicate = 100,dims=60)
+immune.combined@reductions$pca
+immune.combined <- ScoreJackStraw(immune.combined, dims = 1:60)
+
+JackStrawPlot(immune.combined, dims = 1:60)  ## 60
+
+ElbowPlot(immune.combined,ndims = 60)
+
+immune.combined <- RunUMAP(immune.combined, reduction = "pca", dims = 1:60)
+immune.combined <- FindNeighbors(immune.combined, reduction = "pca", dims = 1:60)
+
+immune.combined <- FindClusters(immune.combined, resolution = 1.5)
+
+p1 <- DimPlot(immune.combined, reduction = "umap", group.by = "Condition")
+p2 <- DimPlot(immune.combined, reduction = "umap", label = TRUE, repel = TRUE)
+p1 + p2
+
+DimPlot(immune.combined, reduction = "umap", split.by = "Condition")
+
+DefaultAssay(immune.combined) <- "RNA"
+nk.markers <- FindConservedMarkers(immune.combined, ident.1 = 6, grouping.var = "Condition", verbose = FALSE)
+head(nk.markers)
+
+FeaturePlot(immune.combined, features = c("KLRC1", "IGFBP7","GZMB"))
+
+markers.to.plot <- c("IL7R","CD4","CD8A",	"CD8B",	"PTPRC",	"CD68",	"CD3D",			
+                     "FOXP3",	"CD3E","MKI67",	"AQP1",	"VWF"	,"SPARCL1",	"SOX18",	"TSC22D1",
+                     "COL1A2",	"DCN",	"COL1A1",	"LYZ",	"DCT",	"MLANA",	"MITF",		
+                     "CALD1",	"TAGLN",	"TPM1","KLRB1",			
+                     "MS4A1",	"BANK1",	"CD19",	"CD38",		"IGFBP7",	"LYVE1",		
+                     "KRT10",	"KRT14",	"KRT1",	"KRT5",	"DSG1", "HBB",	"HBA2",			
+                     "TPSAB1",	"TPSB2",	"CD207",	"CD1A",			
+                     "GZMB",	"KLRC1","KLRD1","TRDC","BCL6",	"ACTA2",	"DLK1","CD1C","IRF4","CD14","FCGRCA","CCR1")
+
+to_plot<-immune.combined
+
+to_plot@active.ident<-factor(to_plot@active.ident,levels=c(1,3,4,9,11,12,0,6,7,2,16,24,28, 5,26,32, 8,30,33, 10,13,
+                                                           14, 15, 17, 18, 19,20, 21, 22, 23,25,27,29,31) %>% as.character())
+DotPlot(to_plot, features = markers.to.plot) + 
+  RotatedAxis()+coord_flip()+ scale_colour_gradient2(low = "grey", mid = "yellow", high = "red")
+
+
+immune.combined_annotated <- RenameIdents(immune.combined, `0` = "Treg cell",`1`="CD4 T cell",
+                                          `2`="Vascular Endothelial", `3`="CD4 T cell" , `4`="CD4 T cell"  , `5`="Fibroblast", `6`="CD8 T cell", `7`="CD8 T cell",
+                                          `8`="Macrophage", `9`="CD4 T cell" ,`10`="Melanocyte",`11`="CD4 T cell",`12`="CD4 T cell",`13`="Melanocyte",
+                                          `14`="B cell",`15`="Lymphatic Endothelial",`16`="Vascular Endothelial",`17`="Erythrocyte",`18`="Keratinocyte",`19`="Myofibroblast",`20`="Myofibroblast",
+                                          `21`="NK cell",`22`="Tpro",`23`="NK/T cell",`24`="Vascular Endothelial",`25`="Langerhans cell",`26`="Fibroblast",
+                                          `27`="Mast cell",`28`="Vascular Endothelial",`29`="Dendritic Cell",`30`="Macrophage",`31`="Dendritic Cell",`32`="Fibroblast",`33`="Macrophage")
+
+DimPlot(immune.combined_annotated, label = TRUE)
+
+immune.combined_annotated$seurat_clusters
+cluster_infor<-immune.combined_annotated$integrated_snn_res.1.5
+condition_infor<-immune.combined_annotated$Condition
+
+
+condition_per_cluster_information<-data.frame(condition=condition_infor,cluster=cluster_infor)
+
+condition_per_cluster_information<-condition_per_cluster_information %>% 
+  mutate(condition=ifelse(condition%in%c("normal1","normal2","normal3"),"normal",condition))
+
+condition_per_cluster_information<-condition_per_cluster_information %>% group_by(cluster,condition) %>% summarise(condition_count=n())
+
+
+cell_count<-condition_per_cluster_information %>% summarise(total_count=sum(condition_count))
+
+condition_per_cluster_information<-left_join(condition_per_cluster_information,cell_count)
+
+condition_per_cluster_information<-condition_per_cluster_information %>% mutate(percent_cluster=condition_count/total_count)
+
+condition_per_cluster_information$condition<-factor(condition_per_cluster_information$condition,levels=c("patient1","patient2",
+                                                                                                         "patient3","normal"))
+
+cluster_annotation<-data.frame(`0` = "Treg cell",`1`="CD4 T cell",
+                               `2`="Vascular Endothelial", `3`="CD4 T cell" , `4`="CD4 T cell"  , `5`="Fibroblast", `6`="CD8 T cell", `7`="CD8 T cell",
+                               `8`="Macrophage", `9`="CD4 T cell" ,`10`="Melanocyte",`11`="CD4 T cell",`12`="CD4 T cell",`13`="Melanocyte",
+                               `14`="B cell",`15`="Lymphatic Endothelial",`16`="Vascular Endothelial",`17`="Erythrocyte",`18`="Keratinocyte",`19`="Myofibroblast",`20`="Myofibroblast",
+                               `21`="NK cell",`22`="Tpro",`23`="NK/T cell",`24`="Vascular Endothelial",`25`="Langerhans cell",`26`="Fibroblast",
+                               `27`="Mast cell",`28`="Vascular Endothelial",`29`="Dendritic Cell",`30`="Macrophage",`31`="Dendritic Cell",`32`="Fibroblast",`33`="Macrophage")
+
+cluster_annotation<-cluster_annotation %>% gather(key=cluster,value=cell_type) %>% mutate(cluster=0:33) %>% 
+  mutate(cluster=factor(cluster,levels =  c(1,3,4,9,11,12,0, 6,7, 2,16,24,28, 5,26,32, 8,30,33,10,13,14,15,17,18,19,20,
+                                            21,22,23,25,27,29,31)))
+
+
+condition_per_cluster_information<-left_join(condition_per_cluster_information,cluster_annotation)
+
+condition_per_cluster_information$cluster<-factor(condition_per_cluster_information$cluster,
+                                                  levels = c(1,3,4,9,11,12,
+                                                             0,
+                                                             6,7,
+                                                             2,16,24,28,
+                                                             5,26,32,
+                                                             8,30,33,
+                                                             10,13,
+                                                             14,
+                                                             15,
+                                                             17,
+                                                             18,
+                                                             19,20,
+                                                             21,
+                                                             22,
+                                                             23,
+                                                             25,
+                                                             27,
+                                                             29,31))
+
+
+
+ggplot(condition_per_cluster_information, aes(fill=condition, y=percent_cluster, x=cluster)) + 
+  geom_bar(position="stack", stat="identity")+
+  scale_fill_manual(values = c("darkred","brown2","goldenrod2","grey60"))+
+  theme_classic()+
+  ylab("Percentage")+
+  theme(axis.title = element_text(face="bold",size=13),
+        axis.text = element_text(size=11))+
+  scale_y_continuous(breaks = seq(0,1,0.1))+
+  labs(fill="Data")
+
+
+
+cell_type_list<-immune.combined_annotated@active.ident %>% unique %>% as.character()
+
+############################# cell tyle percentage in GA patients & Normal ###########################
+condition_per_cluster_information<-condition_per_cluster_information %>% mutate(GA=ifelse(condition=="normal","Normal","GA"))
+
+
+condition_per_cluster_information<-condition_per_cluster_information %>% group_by(GA,cell_type) %>% summarise(cell_type_count=sum(condition_count))
+
+cell_type_total<-condition_per_cluster_information %>% summarise(total=sum(cell_type_count))
+
+## GA 11030 cells, Normal 8944 cells
+
+condition_per_cluster_information<-left_join(condition_per_cluster_information, cell_type_total)
+condition_per_cluster_information<-condition_per_cluster_information %>% mutate(cell_type_percent=cell_type_count/total)
+condition_per_cluster_information<-condition_per_cluster_information %>%dplyr::select(-cell_type_count,-total) %>% spread(key=GA,value=cell_type_percent)
+
+write_xlsx(condition_per_cluster_information,"GA-Normal_cell_type_percentage.xlsx")
+
