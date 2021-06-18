@@ -1,4 +1,6 @@
-
+# Label points with the textxy function from the calibrate plot
+install.packages("calibrate")
+library(calibrate)
 
 #############################################################################################################
 ####################################### Macropahgecell#######################################################
@@ -20,23 +22,13 @@ with(macro, plot(avg_log2FC, -log10(p_val_adj), pch=20, main="Volcano plot", xli
 with(subset(macro, p_val_adj<.05 & avg_log2FC>= 1.5), points(avg_log2FC, -log10(p_val_adj), pch=20, col="red"))
 with(subset(macro, p_val_adj<.05 & avg_log2FC <= (-1.5)) , points(avg_log2FC, -log10(p_val_adj), pch=20, col="blue"))
 
-# Label points with the textxy function from the calibrate plot
-install.packages("calibrate")
-library(calibrate)
-
-with(subset(macro, Gene%in%c("CXCL9","CXCL10","FCGR1A","STAT1","IRF5")), textxy(avg_log2FC, -log10(p_val_adj), labs=Gene, cex=.8))
-
-with(subset(macro, Gene%in%c("CD163","MRC1","IRF4","STAT6")), textxy(avg_log2FC, -log10(p_val_adj), labs=Gene, cex=.8))
-
 macro_deg<-macro %>% filter(avg_log2FC>=2.5,p_val_adj<=0.05)
 
-## macrophage up-regulated DEGs and upload to DAVID ## gene ontology analysis tool
+## macrophage up-regulated DEGs and upload to DAVID (gene ontology analysis website)
 write_xlsx(macro_deg,"/data/hongjy/06GA/macro_deg.xlsx")
 
-### DAVID ##
+### DAVID (Gene Ontology & pathway analysis website)##
 https://david.ncifcrf.gov/summary.jsp
-
-
 
 
 #############################################################################################################
